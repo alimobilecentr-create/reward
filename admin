@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="hi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Admin Panel — Receipts & Rewards</title>
+  <style>
+    body{font-family:system-ui; background:#f3f4f6; margin:0;}
+    header{background:#1f2937; color:#fff; padding:16px 20px; display:flex; justify-content:space-between; align-items:center;}
+    header h1{margin:0; font-size:18px;}
+    .container{max-width:1100px; margin:20px auto; padding:0 16px;}
+    .card{background:#fff; border-radius:14px; box-shadow:0 6px 18px rgba(0,0,0,.08); padding:16px; margin-bottom:16px;}
+    .grid{display:grid; gap:12px;}
+    .grid-2{grid-template-columns:1fr 1fr;}
+    .grid-3{grid-template-columns:repeat(3,1fr);}
+    label{font-weight:600; font-size:14px;}
+    input,button{padding:10px; border:1px solid #d1d5db; border-radius:8px; font-size:14px;}
+    button{background:#0b5; color:#fff; cursor:pointer; font-weight:700; border:none;}
+    button.secondary{background:#111827;}
+    button.ghost{background:#fff; color:#111827; border:1px dashed #aaa;}
+    .hidden{display:none;}
+    .receipt{position:relative; border:2px solid #333; border-radius:12px; padding:10px; display:flex; justify-content:space-between; margin-bottom:12px; height:2.3in;}
+    .wm{position:absolute; top:50%; left:50%; transform:translate(-50%,-50%) rotate(-28deg); font-size:14px; color:rgba(0,0,0,.08); font-weight:800;}
+    .qrbox{text-align:center; width:28%; border:1px solid #ddd; border-radius:8px; padding:6px;}
+    .qrbox img{width:80px; height:80px;}
+    .info{width:70%; font-size:13px;}
+    .serial{display:block; width:100%; text-align:center; border:none; border-bottom:1px dashed #666; font-weight:800; color:#2563eb;}
+    .row{display:flex; gap:8px; flex-wrap:wrap;}
+    @media print{header,.no-print{display:none!important;}}
+  </style>
+</head>
+<body>
+  <header>
+    <h1>💼 Admin Panel — Receipts & Rewards</h1>
+    <div id="authBox">
+      <span id="authStatus">Not signed in</span>
+      <button id="btnSignOut" class="secondary hidden">Sign out</button>
+    </div>
+  </header>
+
+  <div class="container">
+
+    <!-- Login -->
+    <div class="card" id="loginCard">
+      <h2>Admin Sign in</h2>
+      <div class="grid grid-2">
+        <div><label>Username</label><input id="username" placeholder="1234"></div>
+        <div><label>Password</label><input id="password" type="password" placeholder="1234"></div>
+      </div>
+      <button id="btnLogin" style="margin-top:10px;">Sign in</button>
+    </div>
+
+    <!-- Admin Section -->
+    <div class="card hidden" id="adminCard">
+      <h2>Save Receipt</h2>
+      <div class="grid grid-3">
+        <div><label>Serial</label><input id="serial"></div>
+        <div><label>Amount (₹)</label><input id="amount" type="number"></div>
+        <div><label>Mobile</label><input id="mobile"></div>
+      </div>
+      <div class="grid grid-2" style="margin-top:10px;">
+        <div><label>Date</label><input id="date" type="date"></div>
+        <div><label>Note</label><input id="note"></div>
+      </div>
+      <div class="row" style="margin-top:10px;">
+        <button id="btnSave">💾 Save</button>
+        <button id="btnGenerate" class="ghost">🔁 Generate 16 Receipts</button>
+        <button id="btnPrint" class="secondary">🖨️ Print</button>
+      </div>
+      <div id="saveMsg" style="margin-top:8px; font-weight:600;"></div>
+    </div>
+
+    <!-- Receipts Grid -->
+    <div class="card hidden" id="gridCard">
+      <h2>Receipt Grid</h2>
+      <div id="gridArea"></div>
+    </div>
+
+  </div>
+
+  <!-- Script -->
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+    import { getFirestore, doc, setDoc, getDoc } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+
+    // 🔹 Firebase Config
+    const firebaseConfig = {
+      apiKey: "AIzaSyBaiT5bJyHBcv17w37wtrNfeoVUIWZIOrE",
+      authDomain: "ewardali.firebaseapp.com",
+      projectId: "ewardali",
+      storageBucket: "ewardali.firebasestorage.app",
+      messagingSenderId: "822834992168",
+      appId: "1:822834992168:web:b28156cde7799c216c111d",
+      measurementId: "G-D521P15QZ6"
+    };
+    const app = initializeApp(firebaseConfig);
+    const db = getFirestore(app);
+
+    const qs = id => document.getElementById(id);
+
+    // Manual login check
+    qs("btnLogin").addEventListener("click", ()=>{
+      const u = qs("username").value;
+      const p = qs("password").value;
+      if(u==="1234" && p==="1234"){
+        qs("authStatus").textContent = "Signed in manually";
+        qs("btnSignOut").classList.remove("hidden");
+        qs("loginCard").classList.add("hidden");
+        qs("adminCard").classList.remove("hidden");
+      } else {
+        alert("❌ Invalid username or password");
+      }
+    });
+
+    qs("btnSignOut").addEventListener("click", ()=>{
+      qs("authStatus").textContent = "Not signed in";
+      qs("btnSignOut").classList.add("hidden");
+      qs("loginCard").classList.remove("hidden");
+      qs("adminCard").classList.add("hidden");
+    });
+
+    // Save Receipt
+    qs('btnSave').addEventListener('click', async ()=>{
+      const serial = qs('serial').value.trim();
+      const amount = qs('amount').value.trim();
+      const mobile = qs('mobile').value.trim();
+      const date = qs('date').value;
+      const note = qs('note').value.trim();
+      if(!serial || !amount || !date){ alert("Serial, Amount, Date आवश्यक हैं"); return; }
+
+      try{
+        await setDoc(doc(db,"receipts",serial), {
+          serial, amount, mobile, note,
+          txDate: new Date(date).toISOString(),
+          rewardDays: 40,
+          rewardClaimed: false
+        }, { merge:true });
+        qs('saveMsg').textContent = `✅ Saved: ${serial}`;
+      }catch(e){
+        qs('saveMsg').textContent = `❌ ${e.message}`;
+      }
+    });
+
+    // QR Generator
+    const monthCodes = ["JAN","FEB","MAR","APR","MAY","JUN","JUL","AUG","SEP","OCT","NOV","DEC"];
+    let counter = Number(localStorage.getItem("serial_counter")||"1");
+
+    qs('btnGenerate').addEventListener('click', async ()=>{
+      qs('gridCard').classList.remove('hidden');
+      const area = qs('gridArea'); area.innerHTML="";
+      const m = monthCodes[new Date().getMonth()];
+      for(let i=0;i<16;i++){
+        const serial = `SN:${m}${String(counter).padStart(3,'0')}`;
+        counter++; localStorage.setItem("serial_counter", counter);
+
+        // Firestore ensure exists
+        const ref = doc(db,"receipts",serial);
+        const snap = await getDoc(ref);
+        if(!snap.exists()){
+          await setDoc(ref,{
+            serial, amount:null, mobile:"", txDate:new Date().toISOString(),
+            rewardDays:40, rewardClaimed:false
+          });
+        }
+
+        const userLink = `user.html?serial=${encodeURIComponent(serial)}`;
+        const qrCodeURL = `https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(userLink)}`;
+
+        const div=document.createElement("div");
+        div.className="receipt";
+        div.innerHTML=`
+          <div class="wm">Ali Mobile Center — ${serial}</div>
+          <div class="info">
+            <b>Ali Mobile Center</b><br>
+            📞 8420178942 / 8226901920<br>
+            🏦 Bank: ___________<br>
+            👤 Name: ___________<br>
+            🔢 Ac No: ___________<br>
+            💰 Amount: _________<br>
+            📱 Mobile: ___________<br>
+            📅 Date: ___________<br>
+          </div>
+          <div class="qrbox">
+            <a href="${userLink}" target="_blank"><img src="${qrCodeURL}"></a>
+            <input class="serial" value="${serial}" readonly>
+          </div>
+        `;
+        area.appendChild(div);
+      }
+    });
+
+    // Print
+    qs('btnPrint').addEventListener('click', ()=> window.print());
+  </script>
+</body>
+</html>
